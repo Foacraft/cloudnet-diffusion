@@ -2,7 +2,6 @@ package com.foacraft.cloudnet.diffusion.config;
 
 import lombok.NonNull;
 
-import java.util.List;
 import java.util.Set;
 
 /**
