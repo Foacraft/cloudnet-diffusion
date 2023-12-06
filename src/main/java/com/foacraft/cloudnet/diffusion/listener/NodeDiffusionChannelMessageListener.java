@@ -19,6 +19,6 @@ public class NodeDiffusionChannelMessageListener {
 
     @EventListener
     public void e(ChannelMessageReceiveEvent e) {
-        System.out.println("收信通道 " + e.channel() + " 消息 " + e.message());
+//        System.out.println("收信通道 " + e.channel() + " 消息 " + e.message());
     }
 }

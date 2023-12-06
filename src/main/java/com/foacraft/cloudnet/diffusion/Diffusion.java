@@ -60,12 +60,12 @@ public class Diffusion extends DriverModule {
     ) {
         eventManager.registerListener(NodeDiffusionChannelMessageListener.class);
         eventManager.registerListener(LibrariesCopper.class);
-        eventManager.registerListener(new PluginIncludeListener(
+        /*eventManager.registerListener(new PluginIncludeListener(
             "cloudnet-diffusion",
             Diffusion.class,
             moduleHelper,
             (service) -> true
-        ));
+        ));*/
     }
 
     @ModuleTask(lifecycle = ModuleLifeCycle.LOADED)
