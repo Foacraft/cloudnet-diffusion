@@ -47,7 +47,8 @@ public class Diffusion extends DriverModule {
             DiffusionConfig.class,
             () -> new DiffusionConfig(
             "local/copper",
-                Set.of("libraries", "libs")
+                Set.of("libraries", "libs"),
+                Set.of("yml", "json")
             ),
             DocumentFactory.json()
         );

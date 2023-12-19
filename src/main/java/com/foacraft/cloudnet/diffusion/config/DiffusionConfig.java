@@ -13,6 +13,7 @@ import java.util.Set;
  */
 public record DiffusionConfig(
     @NonNull String copperStorageDir,
-    @NonNull Set<String> copperDirectories
+    @NonNull Set<String> copperDirectories,
+    @NonNull Set<String> pullsOverrideSuffixes
 ) {
 }
