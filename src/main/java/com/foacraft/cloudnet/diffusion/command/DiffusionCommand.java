@@ -4,11 +4,14 @@ import cloud.commandframework.annotations.Argument;
 import cloud.commandframework.annotations.CommandMethod;
 import cloud.commandframework.annotations.CommandPermission;
 import cloud.commandframework.annotations.parsers.Parser;
+import cloud.commandframework.annotations.specifier.Greedy;
 import cloud.commandframework.annotations.suggestions.Suggestions;
 import cloud.commandframework.context.CommandContext;
 import com.foacraft.cloudnet.diffusion.Diffusion;
+import com.foacraft.cloudnet.diffusion.utils.IOUtils;
 import eu.cloudnetservice.common.concurrent.Task;
 import eu.cloudnetservice.driver.provider.CloudServiceProvider;
+import eu.cloudnetservice.driver.provider.GroupConfigurationProvider;
 import eu.cloudnetservice.driver.provider.ServiceTaskProvider;
 import eu.cloudnetservice.driver.service.ServiceInfoSnapshot;
 import eu.cloudnetservice.driver.service.ServiceTask;
@@ -23,9 +26,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -47,14 +53,17 @@ public class DiffusionCommand {
 
     private final ServiceTaskProvider taskProvider;
     private final CloudServiceProvider serviceProvider;
+    private final GroupConfigurationProvider groupProvider;
 
     @Inject
     public DiffusionCommand(
         @NonNull ServiceTaskProvider taskProvider,
-        @NonNull CloudServiceProvider serviceProvider
+        @NonNull CloudServiceProvider serviceProvider,
+        @NonNull GroupConfigurationProvider groupProvider
     ) {
         this.taskProvider = taskProvider;
         this.serviceProvider = serviceProvider;
+        this.groupProvider = groupProvider;
     }
 
     @Suggestions("task")
@@ -130,14 +139,27 @@ public class DiffusionCommand {
 
     }*/
 
-    @CommandMethod("diffusion|diff pullTemplates <task> <onlyFile>")
+    @CommandMethod("diffusion|diff pullTemplates <task> [onlyFile]")
     public void pullTemplates(
         @NonNull CommandSource source,
         @NonNull @Argument("task") Collection<ServiceTask> serviceTasks,
         @Nullable @Argument("onlyFile") String onlyFile
     ) {
         serviceTasks.forEach((task) -> {
-            var templates = task.templates();
+            var templates = new HashSet<>(task.templates());
+
+            // from task's groups
+            task.groups().forEach((gn) -> {
+                var group = groupProvider.groupConfiguration(gn);
+                templates.addAll(group.templates());
+            });
+
+            // for environment
+            groupProvider.groupConfigurations().forEach((group) -> {
+                if (group.targetEnvironments().contains(task.processConfiguration().environment())) {
+                    templates.addAll(group.templates());
+                }
+            });
 
             serviceProvider.servicesByTask(task.name()).forEach((service) -> {
                 if (!(service.provider() instanceof CloudService cloudService)) {
@@ -147,9 +169,9 @@ public class DiffusionCommand {
                 Task.supply(() -> {
                     try {
                         if (onlyFile != null) {
-                            deleteRecursively(cloudService.directory().resolve(onlyFile));
+                            IOUtils.deleteRecursively(cloudService.directory().resolve(onlyFile));
                         } else {
-                            deleteFilesWithExtensions(cloudService.directory(), Diffusion.config.pullsOverrideSuffixes().toArray(new String[0]));
+                            IOUtils.deleteFilesWithExtensions(cloudService.directory(), Diffusion.config.pullsOverrideSuffixes().toArray(new String[0]));
                         }
                         templates.forEach((template -> template.storage().pull(template, cloudService.directory())));
                     } catch (IOException e) {
@@ -167,14 +189,9 @@ public class DiffusionCommand {
     public void executeLaterCommand(
         @NonNull CommandSource source,
         @NonNull @Argument("task") Collection<ServiceTask> serviceTasks,
-        @NonNull @Argument("command") String[] commandArgs
+        @NonNull @Greedy @Argument("command") String command
     ) {
         int interval = 3000;
-
-        StringBuilder command = new StringBuilder();
-        for (String s : commandArgs) {
-            command.append(s).append(" ");
-        }
 
         AtomicLong delay = new AtomicLong();
         var joiner = new StringJoiner(",");
@@ -185,7 +202,7 @@ public class DiffusionCommand {
             delay.addAndGet((long) serviceInfoSnapshots.size() * interval);
             Task.supply(() -> {
                 serviceInfoSnapshots.forEach((serviceInfoSnapshot) -> {
-                    serviceInfoSnapshot.provider().runCommand(command.toString());
+                    serviceInfoSnapshot.provider().runCommand(command);
                     try {
                         Thread.sleep(interval);
                     } catch (InterruptedException e) {
@@ -196,46 +213,5 @@ public class DiffusionCommand {
         });
 
         source.sendMessage("Diffusion-Execute: Executor will gradually execute command for all service by task '" + joiner + "'. execution successful time left(s): " + TimeUnit.MILLISECONDS.toSeconds(delay.get()));
-    }
-
-
-    private void deleteFilesWithExtensions(Path path, String... extensions) throws IOException {
-        try (Stream<Path> paths = Files.walk(path)) {
-            paths.filter(Files::isRegularFile)
-                .filter(p -> {
-                    String file = p.toString().toLowerCase();
-                    for (String ext : extensions) {
-                        if (file.endsWith(ext)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                })
-                .forEach(p -> {
-                    try {
-                        Files.delete(p);
-//                        System.out.println("Deleted: " + p);
-                    } catch (IOException e) {
-                        System.err.println("Error deleting file " + p + ": " + e.getMessage());
-                    }
-                });
-        } catch (IOException e) {
-            System.err.println("Error walking the directory " + path + ": " + e.getMessage());
-        }
-    }
-
-    private void deleteRecursively(Path path) throws IOException {
-        if (Files.exists(path)) {
-            if (Files.isDirectory(path)) {
-                Files.list(path).forEach(p -> {
-                    try {
-                        deleteRecursively(p);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-            Files.delete(path);
-        }
     }
 }

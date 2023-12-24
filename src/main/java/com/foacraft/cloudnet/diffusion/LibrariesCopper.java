@@ -1,6 +1,7 @@
 package com.foacraft.cloudnet.diffusion;
 
 import com.foacraft.cloudnet.diffusion.config.DiffusionConfig;
+import com.foacraft.cloudnet.diffusion.utils.IOUtils;
 import eu.cloudnetservice.driver.event.EventListener;
 import eu.cloudnetservice.driver.event.events.service.CloudServiceUpdateEvent;
 import eu.cloudnetservice.driver.provider.ServiceTaskProvider;
@@ -15,6 +16,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -60,6 +62,31 @@ public class LibrariesCopper {
             }
         }
 //        System.out.println("服务 " + e.serviceInfo().name() + " 状态改变 " + e.serviceInfo().lifeCycle().name());
+
+        if (!(e.serviceInfo().provider() instanceof CloudService cloudService)) {
+            return;
+        }
+        Path TEMP_SERVICE_DIR = Path.of(System.getProperty("cloudnet.tempDir.services", "temp/services"));
+
+        try {
+            Files.list(TEMP_SERVICE_DIR).forEach((path) -> {
+                if (!path.getFileName().startsWith(cloudService.serviceId().name())) {
+                    return;
+                }
+                if (path.getFileName().endsWith(cloudService.serviceId().uniqueId().toString())) {
+                    return;
+                }
+                try {
+                    IOUtils.deleteRecursively(path);
+                    System.out.println("Diffusion: Removed temp service " + cloudService.serviceId().name() + "'s residual files from " + path);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+            });
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
     }
 
     @EventListener
@@ -81,7 +108,7 @@ public class LibrariesCopper {
         }
         try {
             for (File file : files) {
-                copyFiles(file, serviceDirectory.toPath().resolve(file.getName()).toFile());
+                IOUtils.copyFiles(file, serviceDirectory.toPath().resolve(file.getName()).toFile());
 //                System.out.println(file.toPath() + " -> " + serviceDirectory.toPath().resolve(file.getName()));
             }
         } catch (Throwable t) {
@@ -101,72 +128,11 @@ public class LibrariesCopper {
             File sourceDirectory = new File(serviceDirectory, copperDirectory);
             File targetDirectory = new File(Diffusion.config.copperStorageDir() + File.separator + taskName, copperDirectory);
             try {
-                copyFiles(sourceDirectory, targetDirectory);
+                IOUtils.copyFiles(sourceDirectory, targetDirectory);
             } catch (IOException e) {
                 System.err.println("Diffusion-Copper: An error was coping " + sourceDirectory + " to " + targetDirectory);
                 e.printStackTrace();
             }
-        }
-    }
-
-    private void copyFiles(File sourceDirectory, File targetDirectory) throws IOException {
-        if (!sourceDirectory.exists() || !sourceDirectory.isDirectory()) {
-//            System.out.println("Source directory does not exist or is not a directory.");
-            return;
-        }
-
-        if (!targetDirectory.exists()) {
-            targetDirectory.mkdirs();
-        }
-
-        File[] files = sourceDirectory.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    String subDir = file.getName();
-                    copyFiles(new File(sourceDirectory, subDir), new File(targetDirectory, subDir));
-                } else {
-                    File targetFile = new File(targetDirectory, file.getName());
-
-
-                    if (!Files.isWritable(targetFile.toPath())) {
-                        String sourceFileMD5 = calculateMD5(file);
-                        String targetFileMD5 = calculateMD5(targetFile);
-
-                        if (!sourceFileMD5.equals(targetFileMD5)) {
-                            Files.copy(file.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-//                            System.out.println("Copied: " + file.getAbsolutePath());
-                        } else {
-//                            System.out.println("Skipped (MD5 match): " + file.getAbsolutePath());
-                        }
-                    } else {
-//                        System.out.println("Skipped (File in use): " + targetFile.getAbsolutePath());
-                    }
-                }
-            }
-        }
-    }
-
-    private String calculateMD5(File file) {
-        try (FileInputStream fileInputStream = new FileInputStream(file)) {
-            MessageDigest md5Digest = MessageDigest.getInstance("MD5");
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-
-            while ((bytesRead = fileInputStream.read(buffer)) != -1) {
-                md5Digest.update(buffer, 0, bytesRead);
-            }
-
-            byte[] md5Bytes = md5Digest.digest();
-            StringBuilder md5StringBuilder = new StringBuilder();
-
-            for (byte md5Byte : md5Bytes) {
-                md5StringBuilder.append(Integer.toString((md5Byte & 0xff) + 0x100, 16).substring(1));
-            }
-
-            return md5StringBuilder.toString();
-        } catch (Throwable et) {
-            return "";
         }
     }
 }
