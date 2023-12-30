@@ -54,7 +54,34 @@ public class LibrariesCopper {
             case RUNNING -> {
                 copiedUUIDs.add(uuid);
                 copyToStorage(e.serviceInfo());
+
+                if (!(e.serviceInfo().provider() instanceof CloudService cloudService)) {
+                    return;
+                }
+                Path TEMP_SERVICE_DIR = Path.of(System.getProperty("cloudnet.tempDir.services", "temp/services"));
+
+                try {
+                    Files.list(TEMP_SERVICE_DIR).forEach((path) -> {
+                        if (!path.getFileName().toString().startsWith(cloudService.serviceId().name())) {
+                            System.err.println(path.getFileName() + " + " + cloudService.serviceId().name());
+                            return;
+                        }
+                        if (path.getFileName().endsWith(cloudService.serviceId().uniqueId().toString())) {
+                            System.err.println(path.getFileName() + " + " + cloudService.serviceId().uniqueId());
+                            return;
+                        }
+                        try {
+                            IOUtils.deleteRecursively(path);
+                            System.out.println("Diffusion: Removed temp service " + cloudService.serviceId().name() + "'s residual files from " + path);
+                        } catch (IOException ex) {
+                        }
+                    });
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+
 //                System.out.println("添加" + uuid);
+
             }
             case STOPPED, DELETED -> {
                 copiedUUIDs.remove(uuid);
@@ -63,29 +90,6 @@ public class LibrariesCopper {
         }
 //        System.out.println("服务 " + e.serviceInfo().name() + " 状态改变 " + e.serviceInfo().lifeCycle().name());
 
-        if (!(e.serviceInfo().provider() instanceof CloudService cloudService)) {
-            return;
-        }
-        Path TEMP_SERVICE_DIR = Path.of(System.getProperty("cloudnet.tempDir.services", "temp/services"));
-
-        try {
-            Files.list(TEMP_SERVICE_DIR).forEach((path) -> {
-                if (!path.getFileName().startsWith(cloudService.serviceId().name())) {
-                    return;
-                }
-                if (path.getFileName().endsWith(cloudService.serviceId().uniqueId().toString())) {
-                    return;
-                }
-                try {
-                    IOUtils.deleteRecursively(path);
-                    System.out.println("Diffusion: Removed temp service " + cloudService.serviceId().name() + "'s residual files from " + path);
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
-            });
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        }
 
     }
 
