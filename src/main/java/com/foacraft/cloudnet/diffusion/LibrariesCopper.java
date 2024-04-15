@@ -8,6 +8,7 @@ import eu.cloudnetservice.driver.provider.ServiceTaskProvider;
 import eu.cloudnetservice.driver.service.ServiceInfoSnapshot;
 import eu.cloudnetservice.node.event.service.CloudServicePreProcessStartEvent;
 import eu.cloudnetservice.node.service.CloudService;
+import eu.cloudnetservice.node.service.defaults.provider.RemoteNodeCloudServiceProvider;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -52,6 +53,10 @@ public class LibrariesCopper {
         }
         switch (e.serviceInfo().lifeCycle()) {
             case RUNNING -> {
+                if (e.serviceInfo().provider() instanceof RemoteNodeCloudServiceProvider) {
+//                    System.out.println("Diffusion: " + e.serviceInfo().name() + " is remote service. skipped!");
+                    return;
+                }
                 copiedUUIDs.add(uuid);
                 copyToStorage(e.serviceInfo());
 
@@ -63,11 +68,9 @@ public class LibrariesCopper {
                 try {
                     Files.list(TEMP_SERVICE_DIR).forEach((path) -> {
                         if (!path.getFileName().toString().startsWith(cloudService.serviceId().name())) {
-                            System.err.println(path.getFileName() + " + " + cloudService.serviceId().name());
                             return;
                         }
-                        if (path.getFileName().endsWith(cloudService.serviceId().uniqueId().toString())) {
-                            System.err.println(path.getFileName() + " + " + cloudService.serviceId().uniqueId());
+                        if (path.getFileName().toString().endsWith(cloudService.serviceId().uniqueId().toString())) {
                             return;
                         }
                         try {
