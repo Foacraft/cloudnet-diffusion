@@ -16,6 +16,7 @@ import eu.cloudnetservice.driver.provider.ServiceTaskProvider;
 import eu.cloudnetservice.driver.service.ServiceInfoSnapshot;
 import eu.cloudnetservice.driver.service.ServiceTask;
 import eu.cloudnetservice.driver.service.ServiceTemplate;
+import eu.cloudnetservice.driver.template.FileInfo;
 import eu.cloudnetservice.node.command.annotation.CommandAlias;
 import eu.cloudnetservice.node.command.source.CommandSource;
 import eu.cloudnetservice.node.service.CloudService;
@@ -109,12 +110,9 @@ public class DiffusionCommand {
     @Suggestions("onlyFile")
     public @NonNull List<String> onlyFileSuggest(@NonNull CommandContext<?> $, @NonNull String input) {
         var task = ((ServiceTask) $.get("task"));
-        var a = task.templates().stream().flatMap((template -> template.storage().listFiles(template, "", true)));
+        var files = task.templates().stream().flatMap((template -> template.storage().listFiles(template, "", true).stream()));
 
-        return this.serviceProvider.services()
-                .stream()
-                .map(ServiceInfoSnapshot::name)
-                .toList();
+        return files.map((FileInfo::path)).collect(Collectors.toList());
     }
 
     @Parser(suggestions = "onlyFile")
@@ -123,13 +121,7 @@ public class DiffusionCommand {
         @NonNull Queue<String> input
     ) {
         var name = input.remove();
-        if (name.equals("*")) {
-            return this.serviceProvider.services();
-        }
-        return this.serviceProvider.services()
-                .stream()
-                .filter(service -> name.equalsIgnoreCase(service.name()))
-                .collect(Collectors.toList());
+        return List.of(name);
     }
 
     /*// copy plugin dataFolder to temp service from template
