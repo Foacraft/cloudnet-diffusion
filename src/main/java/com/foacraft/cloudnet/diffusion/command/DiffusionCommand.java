@@ -106,6 +106,32 @@ public class DiffusionCommand {
                 .collect(Collectors.toList());
     }
 
+    @Suggestions("onlyFile")
+    public @NonNull List<String> onlyFileSuggest(@NonNull CommandContext<?> $, @NonNull String input) {
+        var task = ((ServiceTask) $.get("task"));
+        var a = task.templates().stream().flatMap((template -> template.storage().listFiles(template, "", true)));
+
+        return this.serviceProvider.services()
+                .stream()
+                .map(ServiceInfoSnapshot::name)
+                .toList();
+    }
+
+    @Parser(suggestions = "onlyFile")
+    public @NonNull Collection<String> onlyFileParser(
+        @NonNull CommandContext<?> $,
+        @NonNull Queue<String> input
+    ) {
+        var name = input.remove();
+        if (name.equals("*")) {
+            return this.serviceProvider.services();
+        }
+        return this.serviceProvider.services()
+                .stream()
+                .filter(service -> name.equalsIgnoreCase(service.name()))
+                .collect(Collectors.toList());
+    }
+
     /*// copy plugin dataFolder to temp service from template
     @CommandMethod("diffusion|diff updateFile <task> <fileName>")
     public void updateDataFolder(
@@ -172,8 +198,12 @@ public class DiffusionCommand {
                             IOUtils.deleteRecursively(cloudService.directory().resolve(onlyFile));
                         } else {
                             IOUtils.deleteFilesWithExtensions(cloudService.directory(), Diffusion.config.pullsOverrideSuffixes().toArray(new String[0]));
+                            templates.forEach((template -> template.storage().pull(template, cloudService.directory())));
+                            return;
                         }
-                        templates.forEach((template -> template.storage().pull(template, cloudService.directory())));
+                        templates.forEach((template -> {
+                            template.storage().deployDirectory(template, cloudService.directory().resolve(onlyFile));
+                        }));
                     } catch (IOException e) {
                         source.sendMessage("Diffusion-Pull-Templates: Failed to pull task " + task.name() + "'s templates to service " + service.serviceId().name() + ".");
                         e.printStackTrace();
@@ -198,7 +228,8 @@ public class DiffusionCommand {
 
         serviceTasks.forEach((task) -> {
             joiner.add(task.name());
-            Collection<ServiceInfoSnapshot> serviceInfoSnapshots = serviceProvider.servicesByTask(task.name());
+            Collection<ServiceInfoSnapshot> serviceInfoSnapshots = serviceProvider.servicesByTask(task.name())
+                    .stream().filter(ServiceInfoSnapshot::connected).toList();
             delay.addAndGet((long) serviceInfoSnapshots.size() * interval);
             Task.supply(() -> {
                 serviceInfoSnapshots.forEach((serviceInfoSnapshot) -> {
